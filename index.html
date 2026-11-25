@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>فرز الكسور الذكي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: هادي وإكلينيكي — قائمة طبيب الطوارئ، مش إعلان
+   IDEA: لوح قراءة الأشعة (Lightbox) + قائمة فرز بالأولوية
+   PICTURE: قائمة الحالات نفسها، والأشعة على خلفية سودا زي شاشة الأشعة
+   COLOUR: أبيض + حبر غامق، ألوان الفرز التلاتة بس للمعنى (أحمر/أصفر/أخضر)
+   TYPE: IBM Plex Sans Arabic (عربي وإنجليزي بنفس الخط) */
+
+/* ===== الألوان والمتغيرات (بتشتغل في الوضع الفاتح والغامق) ===== */
+:root{color-scheme:light dark;
+  --bg:light-dark(#ffffff,#0c0f14);
+  --panel:light-dark(#f4f5f7,#151a22);
+  --line:light-dark(#e3e6eb,#252c38);
+  --ink:light-dark(#121620,#e9edf3);
+  --mute:light-dark(#5b6472,#9aa4b2);
+  --film:#06080b;                         /* خلفية صور الأشعة */
+  --brand:light-dark(#0b6e79,#3fc1cf);    /* لون العلامة */
+  --red:#d92d20;  --red-bg:light-dark(#fdecea,#3a1512);
+  --amb:#c98a00;  --amb-bg:light-dark(#fff5d6,#3a2c08);
+  --grn:#14915a;  --grn-bg:light-dark(#e3f6ec,#0f2e20);
+  --r:14px}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "IBM Plex Sans Arabic",system-ui,sans-serif;overflow-x:clip}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+[hidden]{display:none!important}
+
+/* ===== الشريط العلوي ===== */
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:12px max(4vw,16px);background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px;margin-inline-end:auto}
+.logo{width:42px;height:42px;border-radius:11px;background:var(--ink);display:grid;place-items:center}
+.brand h1{font-size:20px;line-height:1.1;margin:0;font-weight:700}
+.brand small{display:block;color:var(--mute);font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:99px;background:var(--panel);font-size:13px;color:var(--mute)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--amb);flex:none}
+.pill.ok .dot{background:var(--grn)} .pill.err .dot{background:var(--red)}
+.btn{text-decoration:none;min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-weight:500;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.btn:hover{background:var(--panel)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.small{min-height:36px;padding:0 12px;font-size:14px}
+.btn.ghost{border-color:transparent;background:transparent}
+
+/* ===== التخطيط العام ===== */
+main{max-width:1240px;margin:0 auto;padding:24px max(4vw,16px) 40px}
+.grid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:24px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border-radius:var(--r);padding:18px}
+h2{font-size:17px;margin:0 0 12px;font-weight:600}
+label{font-size:14px;color:var(--mute);display:block;margin-bottom:4px}
+input,select,textarea{width:100%;min-height:44px;font-size:16px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+textarea{min-height:96px;resize:vertical}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fields .wide{grid-column:1/-1}
+
+/* منطقة الرفع */
+.drop{display:grid;place-items:center;text-align:center;gap:6px;padding:28px 16px;border:2px dashed var(--line);border-radius:var(--r);background:var(--bg);cursor:pointer;transition:border-color .2s,background .2s}
+.drop.over{border-color:var(--brand);background:color-mix(in srgb,var(--brand) 8%,var(--bg))}
+.drop b{font-size:17px}.drop span{color:var(--mute);font-size:14px}
+details{margin-top:14px}summary{cursor:pointer;font-weight:500;min-height:32px}
+.note{font-size:13px;color:var(--mute);margin:10px 0 0}
+
+/* ===== شريط العدادات ===== */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.stat{border-radius:12px;padding:12px 14px;background:var(--panel)}
+.stat b{display:block;font-size:28px;line-height:1.1;font-weight:600}
+.stat span{font-size:13px;color:var(--mute)}
+.stat.red b{color:var(--red)}.stat.amb b{color:var(--amb)}.stat.grn b{color:var(--grn)}
+@media(max-width:520px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.listhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.listhead h2{margin:0;margin-inline-end:auto}
+
+/* ===== كارت الحالة في القائمة ===== */
+.case{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px;border-radius:var(--r);
+  border:1px solid var(--line);border-inline-start:5px solid var(--c);background:var(--bg);margin-bottom:10px;animation:in .35s ease both}
+@keyframes in{from{opacity:0;transform:translateY(6px)}}
+@media(prefers-reduced-motion:reduce){.case{animation:none}}
+.case.red{--c:var(--red)}.case.yellow{--c:var(--amb)}.case.green{--c:var(--grn)}.case.done{--c:var(--line);opacity:.78}
+.thumb{width:72px;height:72px;border-radius:10px;background:var(--film);object-fit:contain}
+.case h3{margin:0;font-size:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tag{font-size:13px;font-weight:600;padding:2px 10px;border-radius:99px;background:var(--cb);color:var(--c)}
+.red .tag{--cb:var(--red-bg)}.yellow .tag{--cb:var(--amb-bg)}.green .tag{--cb:var(--grn-bg)}
+.meta{font-size:14px;color:var(--mute)}
+.late{color:var(--red);font-weight:600}
+.sum{font-size:14px;margin-top:6px;padding:8px 10px;border-radius:8px;background:var(--panel)}
+.sum.wait{color:var(--mute)}
+.actions{display:flex;flex-direction:column;gap:6px}
+@media(max-width:600px){.case{grid-template-columns:56px minmax(0,1fr)}.thumb{width:56px;height:56px}.actions{grid-column:1/-1;flex-direction:row}.actions .btn{flex:1}}
+.empty{text-align:center;padding:48px 16px;color:var(--mute);border:1px dashed var(--line);border-radius:var(--r)}
+
+/* ===== صفحة الحالة ===== */
+.back{margin-bottom:14px}a{color:var(--brand)}
+.casegrid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:start}
+@media(max-width:900px){.casegrid{grid-template-columns:minmax(0,1fr)}}
+.viewer{background:var(--film);border-radius:var(--r);padding:14px;color:#e9edf3}
+.stage{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#000}
+.stage img,.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+.stage canvas{mix-blend-mode:screen;transition:opacity .2s}
+.stage svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.stage svg rect{fill:none;stroke:#ff3b30;stroke-width:3;vector-effect:non-scaling-stroke}
+.stage svg text{fill:#fff;font:600 13px "IBM Plex Sans Arabic",sans-serif;paint-order:stroke;stroke:#ff3b30;stroke-width:4px}
+.toggle{display:inline-flex;align-items:center;gap:8px;min-height:44px;cursor:pointer}
+.toggle input{width:20px;height:20px;min-height:0;accent-color:#ff3b30}
+.yolo{font-size:14px;margin-top:4px}
+.vbar{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap;font-size:14px}
+.vbar input[type=range]{flex:1;min-height:auto;padding:0;accent-color:#3fc1cf;border:0;background:none}
+.legend{display:flex;align-items:center;gap:8px;font-size:13px;color:#9aa4b2;margin-top:8px}
+.legend i{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,#00f,#0ff,#0f0,#ff0,#f00)}
+[dir=rtl] .legend i{background:linear-gradient(-90deg,#00f,#0ff,#0f0,#ff0,#f00)}
+.prob{font-size:44px;font-weight:600;line-height:1}
+.bar{height:10px;border-radius:5px;background:var(--line);overflow:hidden;margin:10px 0 4px}
+.bar i{display:block;height:100%;background:var(--c)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:15px}
+.kv dt{color:var(--mute)}.kv dd{margin:0}
+.stack>*+*{margin-top:16px}
+.decisions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+@media(max-width:520px){.decisions{grid-template-columns:1fr}}
+.decisions .btn.on{background:var(--ink);color:var(--bg)}
+.warn{border-radius:10px;padding:12px 14px;background:var(--red-bg);color:var(--ink);border-inline-start:4px solid var(--red);font-size:15px}
+
+/* ===== نوافذ (إعدادات/تأكيد) ===== */
+.modal{position:fixed;inset:0;background:rgb(0 0 0/.45);display:grid;place-items:center;padding:16px;z-index:20}
+.modal .card{background:var(--bg);width:min(520px,100%);box-shadow:0 20px 60px rgb(0 0 0/.3)}
+.row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:16px}
+.toast{position:fixed;bottom:20px;inset-inline-start:50%;translate:-50% 0;background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:10px;z-index:30;font-size:15px}
+[dir=rtl] .toast{translate:50% 0}
+footer{max-width:1240px;margin:0 auto;padding:18px max(4vw,16px) 32px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<!-- ===================== الشريط العلوي ===================== -->
+<header>
+  <div class="brand">
+    <!-- لوجو: عضمة مرسومة بـ SVG -->
+    <div class="logo" aria-hidden="true">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 10c.7-.7 1.7-.7 2.8-.2a2.5 2.5 0 1 0-1.6-4.8 2.5 2.5 0 1 0-4.8-1.6c.5 1.1.5 2.1-.2 2.8l-6.4 6.4c-.7.7-1.7.7-2.8.2a2.5 2.5 0 1 0 1.6 4.8 2.5 2.5 0 1 0 4.8 1.6c-.5-1.1-.5-2.1.2-2.8z"/>
+      </svg>
+    </div>
+    <div><h1 data-t="title"></h1><small data-t="subtitle"></small></div>
+  </div>
+  <!-- حالة النموذج: بيحمّل / جاهز / فيه مشكلة -->
+  <span id="modelPill" class="pill"><span class="dot"></span><span id="modelText"></span></span>
+  <span id="yoloPill" class="pill"><span class="dot"></span><span id="yoloText"></span></span>
+  <button id="langBtn" class="btn small" aria-label="Language"></button>
+  <button id="settingsBtn" class="btn small" data-t="settings"></button>
+</header>
+
+<main>
+  <!-- ===================== الصفحة الرئيسية: الرفع + قائمة الطبيب ===================== -->
+  <section id="listView">
+    <div class="grid">
+      <!-- العمود الأول: رفع الصور (فني الأشعة) -->
+      <aside class="card">
+        <h2 data-t="uploadTitle"></h2>
+        <label class="drop" id="drop" tabindex="0">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          <b data-t="dropMain"></b><span data-t="dropSub"></span>
+          <input id="file" type="file" accept="image/*" multiple hidden>
+        </label>
+        <!-- بيانات أساسية اختيارية بتتسجل مع الصور اللي هتترفع -->
+        <details>
+          <summary data-t="intakeTitle"></summary>
+          <div class="fields" style="margin-top:10px">
+            <div><label for="fAge" data-t="age"></label><input id="fAge" type="number" min="0" max="120" inputmode="numeric"></div>
+            <div><label for="fSex" data-t="sex"></label><select id="fSex"></select></div>
+            <div class="wide"><label for="fRegion" data-t="region"></label><select id="fRegion"></select></div>
+            <div class="wide"><label for="fCause" data-t="cause"></label><input id="fCause"></div>
+          </div>
+          <p class="note" data-t="noNames"></p>
+        </details>
+        <p class="note" data-t="privacy"></p>
+      </aside>
+
+      <!-- العمود التاني: قائمة الطبيب -->
+      <section>
+        <div class="stats" id="stats"></div>
+        <div class="listhead">
+          <h2 id="queueTitle"></h2>
+          <button class="btn small ghost" id="csvBtn" data-t="exportCsv"></button>
+          <button class="btn small ghost" id="clearBtn" data-t="clearAll"></button>
+        </div>
+        <div id="list"></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ===================== صفحة ملخص الحالة ===================== -->
+  <section id="caseView" hidden></section>
+</main>
+
+<footer><span data-t="disclaimer"></span> · <span id="modelInfo"></span></footer>
+
+<!-- نافذة الإعدادات -->
+<div class="modal" id="settings" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <h2 id="setTitle" data-t="settings"></h2>
+    <label for="hook" data-t="hookLabel"></label>
+    <input id="hook" type="url" dir="ltr" placeholder="https://your-n8n.app/webhook/...">
+    <p class="note" data-t="hookHelp"></p>
+    <div class="row">
+      <button class="btn" id="hookTest" data-t="hookTest"></button>
+      <button class="btn" id="setCancel" data-t="cancel"></button>
+      <button class="btn primary" id="setSave" data-t="save"></button>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة تأكيد عامة (بدل confirm اللي مش بيشتغل في كل المتصفحات) -->
+<div class="modal" id="ask" hidden>
+  <div class="card" role="alertdialog" aria-modal="true">
+    <p id="askText" style="margin:0;font-size:17px"></p>
+    <div class="row"><button class="btn" id="askNo"></button><button class="btn primary" id="askYes"></button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<!-- مكتبة TensorFlow.js (بتشغّل النموذج جوه المتصفح) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<!-- مكتبة ONNX Runtime Web (بتشغّل نموذج YOLO جوه المتصفح) -->
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script>
+{
+// =====================================================================
+// 1) النصوص بلغتين (عربي / إنجليزي)
+// =====================================================================
+const T = {
+  ar: {
+    title:"فرز الكسور الذكي", subtitle:"ترتيب أشعة اليد والمعصم حسب اشتباه الكسر",
+    settings:"الإعدادات", loading:"بيحمّل النموذج…", ready:"النموذج جاهز", failed:"النموذج ما اتحملش",
+    uploadTitle:"رفع صور الأشعة", dropMain:"اسحب صور الأشعة هنا أو اضغط للرفع", dropSub:"تقدر ترفع أكثر من صورة مرة وحدة",
+    intakeTitle:"بيانات أساسية (اختياري)", age:"العمر", sex:"الجنس", region:"المنطقة", cause:"سبب الإصابة",
+    sexes:{"":"—",male:"ذكر",female:"أنثى"},
+    regions:{"":"—",wrist_l:"المعصم الأيسر",wrist_r:"المعصم الأيمن",hand_l:"اليد اليسرى",hand_r:"اليد اليمنى"},
+    noNames:"لا تكتب أسماء أو أرقام هوية.", privacy:"الصور تتحلل داخل المتصفح وما تطلع من الجهاز. اللي ينرسل للـ Webhook هو النتيجة بس.",
+    pending:"بانتظار المراجعة", red:"اشتباه قوي بكسر", yellow:"غير متأكد، يحتاج مراجعة", green:"غالبًا سليم", reviewedN:"تمت مراجعتها",
+    queue:n=>`قائمة الطبيب: ${n} حالات بانتظار المراجعة`,
+    caseN:n=>`حالة ${n}`, suspicion:"نسبة الاشتباه", arrived:"وصلت",
+    review:"تمت المراجعة", open:"فتح الحالة", reviewedAt:(t,m)=>`تمت المراجعة ${t} · انتظرت ${m}`,
+    late:"تجاوزت ١٠ دقايق بدون مراجعة", analyzing:"جاري التحليل…",
+    summaryWait:"بانتظار الملخص من n8n…", summaryFail:"ما وصل ملخص من الـ Webhook", demoTag:"ملخص تجريبي من الصفحة (لين يتجهز رابط n8n)",
+    empty:"ما فيه حالات لسه. ارفع صورة أشعة عشان تبدأ.", exportCsv:"تصدير CSV", clearAll:"مسح الكل",
+    clearAsk:"تمسح كل الحالات من هالجهاز؟", yes:"نعم", no:"لا", cancel:"إلغاء", save:"حفظ",
+    back:"رجوع للقائمة", caseSummary:n=>`ملخص الحالة رقم ${n}`, priority:{red:"أولوية عاجلة",yellow:"أولوية متوسطة",green:"أولوية عادية"},
+    basics:"بيانات أساسية", modelResult:"نتيجة النموذج", fracture:"اشتباه كسر", times:"الأوقات",
+    tArrive:"وصول الصورة", tAlert:"إرسال التنبيه (n8n)", tReview:"المراجعة", notYet:"لم تتم بعد", notSent:"ما انرسل",
+    heat:"الخريطة الحرارية (Grad-CAM)", heatOn:"إظهار", heatHelp:"المنطقة الحمرا هي اللي ركز عليها النموذج — توضيحية، مو تحديد دقيق لمكان الكسر.",
+    low:"تأثير قليل", high:"تأثير عالي",
+    yLoading:"YOLO بيحمّل…", yReady:"YOLO جاهز", yFailed:"YOLO ما اتحملش", yBox:"مكان الكسر (YOLO)",
+    yFound:n=>n===1?"📦 YOLO حدد مكان كسر واحد":n===2?"📦 YOLO حدد مكانين للكسر":`📦 YOLO حدد ${nf(n)} أماكن للكسر`, yNone:"📦 YOLO ما لقى مكان كسر واضح", yWait:"📦 YOLO بيدور على مكان الكسر…",
+    yHelp:"المربع الأحمر هو المكان اللي YOLO شايف فيه الكسر، والرقم هو ثقته. أداة مساعدة، والقرار للطبيب.",
+    initSummary:"الملخص المبدئي", notes:"ملاحظات الطبيب", decision:"قرار الطبيب",
+    dec:{confirm:"تأكيد كسر",none:"لا يوجد كسر",more:"يحتاج أشعة إضافية"}, decSaved:"انحفظ القرار وانرسل",
+    secondEye:"النموذج شايف اشتباه قوي في هالمنطقة، تأكد مرة ثانية.", secondEyeAsk:"النموذج شايف اشتباه قوي بكسر. متأكد إنه لا يوجد كسر؟",
+    keep:"راجع مرة ثانية", sure:"متأكد",
+    hookLabel:"رابط الـ Webhook (n8n)", hookHelp:"لو الخانة فاضية، الصفحة تشتغل بوضع تجريبي وتكتب ملخص محلي بدل n8n.",
+    hookTest:"تجربة الإرسال", hookOk:"وصل الرد من الـ Webhook ✓", hookBad:"ما قدرنا نوصل للرابط",
+    disclaimer:"نموذج تعليمي، مو للاستخدام السريري. القرار النهائي دايمًا للطبيب.",
+    minutes:m=>m<1?"أقل من دقيقة":m===1?"دقيقة":m===2?"دقيقتين":m<=10?`${(+m).toLocaleString("ar-EG")} دقايق`:`${(+m).toLocaleString("ar-EG")} دقيقة`,
+    resultWord:{fracture:"كسر",normal:"سليم"}, notImage:"الملف هذا مو صورة", resend:"إعادة الإرسال",
+    demo:(c,L)=>`صورة أشعة ${c.region?L.regions[c.region]:"يد/معصم"}${c.age?`، العمر ${c.age}`:""}${c.sex?`، ${L.sexes[c.sex]}`:""}. نسبة اشتباه الكسر ${Math.min(99,Math.round(c.p*100))}٪ (${L[c.level]}). ${c.level==="red"?"أولوية عاجلة، تحتاج مراجعة طبيب العظام.":c.level==="yellow"?"تحتاج نظرة الطبيب لأن النموذج غير متأكد.":"مراجعة عادية."}`
+  },
+  en: {
+    title:"Smart Fracture Triage", subtitle:"Hand & wrist X-rays sorted by fracture suspicion",
+    settings:"Settings", loading:"Loading model…", ready:"Model ready", failed:"Model failed to load",
+    uploadTitle:"Upload X-rays", dropMain:"Drop X-ray images here or click to upload", dropSub:"You can upload several images at once",
+    intakeTitle:"Basic details (optional)", age:"Age", sex:"Sex", region:"Region", cause:"Injury cause",
+    sexes:{"":"—",male:"Male",female:"Female"},
+    regions:{"":"—",wrist_l:"Left wrist",wrist_r:"Right wrist",hand_l:"Left hand",hand_r:"Right hand"},
+    noNames:"Do not enter names or ID numbers.", privacy:"Images are analysed inside the browser and never leave the device. Only the result is sent to the webhook.",
+    pending:"Awaiting review", red:"Strong fracture suspicion", yellow:"Uncertain, needs review", green:"Likely normal", reviewedN:"Reviewed",
+    queue:n=>`Doctor's worklist: ${n} cases awaiting review`,
+    caseN:n=>`Case ${n}`, suspicion:"Suspicion", arrived:"arrived",
+    review:"Mark reviewed", open:"Open case", reviewedAt:(t,m)=>`Reviewed ${t} · waited ${m}`,
+    late:"Over 10 minutes without review", analyzing:"Analysing…",
+    summaryWait:"Waiting for summary from n8n…", summaryFail:"No summary came back from the webhook", demoTag:"Demo summary from the page (until the n8n link is ready)",
+    empty:"No cases yet. Upload an X-ray to start.", exportCsv:"Export CSV", clearAll:"Clear all",
+    clearAsk:"Delete all cases from this device?", yes:"Yes", no:"No", cancel:"Cancel", save:"Save",
+    back:"Back to worklist", caseSummary:n=>`Case ${n} summary`, priority:{red:"Urgent priority",yellow:"Medium priority",green:"Routine priority"},
+    basics:"Basic details", modelResult:"Model result", fracture:"Fracture suspicion", times:"Times",
+    tArrive:"Image arrived", tAlert:"Alert sent (n8n)", tReview:"Review", notYet:"Not yet", notSent:"Not sent",
+    heat:"Heat map (Grad-CAM)", heatOn:"Show", heatHelp:"Red marks where the model focused — illustrative, not an exact fracture location.",
+    low:"Low influence", high:"High influence",
+    yLoading:"YOLO loading…", yReady:"YOLO ready", yFailed:"YOLO failed to load", yBox:"Fracture location (YOLO)",
+    yFound:n=>`📦 YOLO marked ${n} fracture location${n>1?"s":""}`, yNone:"📦 YOLO found no clear fracture location", yWait:"📦 YOLO is looking for the fracture…",
+    yHelp:"The red box is where YOLO sees the fracture, with its confidence. A support tool; the doctor decides.",
+    initSummary:"Initial summary", notes:"Doctor's notes", decision:"Doctor's decision",
+    dec:{confirm:"Confirm fracture",none:"No fracture",more:"Needs more imaging"}, decSaved:"Decision saved and sent",
+    secondEye:"The model sees a strong suspicion in this area — please check again.", secondEyeAsk:"The model sees a strong fracture suspicion. Are you sure there is no fracture?",
+    keep:"Check again", sure:"I'm sure",
+    hookLabel:"Webhook URL (n8n)", hookHelp:"If empty, the page runs in demo mode and writes a local summary instead of n8n.",
+    hookTest:"Test send", hookOk:"Webhook replied ✓", hookBad:"Could not reach the URL",
+    disclaimer:"Educational model, not for clinical use. The final decision is always the doctor's.",
+    minutes:m=>m<1?"under a minute":m===1?"1 minute":`${m} minutes`,
+    resultWord:{fracture:"Fracture",normal:"Normal"}, notImage:"This file is not an image", resend:"Resend",
+    demo:(c,L)=>`${c.region?L.regions[c.region]:"Hand/wrist"} X-ray${c.age?`, age ${c.age}`:""}${c.sex?`, ${L.sexes[c.sex].toLowerCase()}`:""}. Fracture suspicion ${Math.min(99,Math.round(c.p*100))}% (${L[c.level].toLowerCase()}). ${c.level==="red"?"Urgent priority; needs orthopaedic review.":c.level==="yellow"?"Needs a doctor's look because the model is unsure.":"Routine review."}`
+  }
+};
+
+// =====================================================================
+// 2) الحالة العامة للصفحة + الحفظ في المتصفح (localStorage)
+// =====================================================================
+const KEY = "fracture-triage-v1";
+let S = { cases: [], next: 1, hook: "", lang: "ar" };
+try { Object.assign(S, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) {}
+// نحفظ بعد أي تغيير (لو المساحة خلصت ما نوقف الصفحة)
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast("⚠️ storage full"); } };
+const L = () => T[S.lang];                                   // نصوص اللغة الحالية
+const $ = s => document.querySelector(s);
+// أي نص جاي من المستخدم أو الـ Webhook بنعمله escape علشان ما يتنفذش كـ HTML
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+// الوقت بصيغة ISO مع فرق التوقيت المحلي (زي 2026-11-28T16:05:00+03:00)
+function isoLocal(d = new Date()) {
+  const z = -d.getTimezoneOffset(), p = n => String(Math.floor(Math.abs(n))).padStart(2, "0");
+  const t = new Date(d.getTime() + z * 60000).toISOString().slice(0, 19);
+  return `${t}${z >= 0 ? "+" : "-"}${p(z / 60)}:${p(z % 60)}`;
+}
+// عرض الساعة (بالأرقام العربية في الواجهة العربية)
+const hhmm = iso => iso ? new Date(iso).toLocaleTimeString(S.lang === "ar" ? "ar-EG" : "en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
+const nf = n => n.toLocaleString(S.lang === "ar" ? "ar-EG" : "en");
+// النسبة المئوية (بنوقف عند 99% لأن النموذج عمره ما بيبقى متأكد 100%)
+const pct = p => { const v = Math.min(99, Math.round(p * 100)); return S.lang === "ar" ? `${nf(v)}٪` : `${v}%`; };
+const minsBetween = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
+
+// =====================================================================
+// 3) تحميل النموذج والإعدادات
+// =====================================================================
+const FEAT = "StatefulPartitionedCall/functional_2_1/densenet121_1/relu_1/Relu";          // خريطة المميزات (12×12×1024)
+const DENSE = "StatefulPartitionedCall/functional_2_1/fracture_prob_1/Cast/ReadVariableOp"; // أوزان الطبقة الأخيرة (1024)
+let model = null, CFG = null, denseW = null;
+
+async function loadModel() {
+  setPill("", L().loading);
+  try {
+    CFG = await (await fetch("config.json")).json();          // الحدود: threshold و red و yellow
+    model = await tf.loadGraphModel("model/model.json");       // النموذج نفسه (TensorFlow.js)
+    denseW = model.weights[DENSE][0].reshape([1024]);          // أوزان الطبقة الأخيرة لحساب Grad-CAM
+    tf.tidy(() => model.execute(tf.zeros([1, 384, 384, 3]), [FEAT, "Identity"]));  // تسخين أول مرة
+    setPill("ok", L().ready);
+    $("#modelInfo").textContent = `${CFG.model} · ${CFG.dataset} · AUC ${CFG.test_metrics.AUC.toFixed(3)} · Recall ${(CFG.test_metrics.Recall*100).toFixed(1)}%`;
+  } catch (e) { console.error(e); setPill("err", L().failed); }
+}
+function setPill(cls, txt, pill = "#modelPill", text = "#modelText") { $(pill).className = "pill " + cls; $(text).textContent = txt; }
+
+// =====================================================================
+// 4) تجهيز الصورة بنفس طريقة النوتبوك بالظبط
+//    رمادي ← توزيع الدرجات (0.5%–99.5%) ← تصغير مع الحفاظ على النسبة ← في نص مربع أسود 384×384
+// =====================================================================
+function readImage(file) {
+  return new Promise((ok, bad) => {
+    const img = new Image(); img.onload = () => ok(img); img.onerror = bad;
+    img.src = URL.createObjectURL(file);
+  });
+}
+function prepare(img, N = 384, pad = 0) {
+  const r = N / Math.max(img.width, img.height);
+  const w = Math.round(img.width * r), h = Math.round(img.height * r), x0 = (N - w) >> 1, y0 = (N - h) >> 1;
+  const c = document.createElement("canvas"); c.width = c.height = N;
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.fillStyle = `rgb(${pad},${pad},${pad})`; g.fillRect(0, 0, N, N);   // الحواف: أسود للتصنيف، رمادي 114 لـ YOLO
+  g.imageSmoothingQuality = "high"; g.drawImage(img, x0, y0, w, h);
+  const d = g.getImageData(x0, y0, w, h), px = d.data, gray = new Float32Array(w * h);
+  for (let i = 0; i < gray.length; i++) gray[i] = (px[i*4] + px[i*4+1] + px[i*4+2]) / 3;   // رمادي = متوسط القنوات
+  const sorted = Float32Array.from(gray).sort();
+  const lo = sorted[Math.floor(sorted.length * 0.005)], hi = sorted[Math.floor(sorted.length * 0.995)];
+  for (let i = 0; i < gray.length; i++) {
+    const v = Math.max(0, Math.min(255, (gray[i] - lo) / (hi - lo + 1e-6) * 255));
+    px[i*4] = px[i*4+1] = px[i*4+2] = v; px[i*4+3] = 255;
+  }
+  g.putImageData(d, x0, y0);
+  c.geo = { x0, y0, w, h };   // مكان الصورة جوه المربع (علشان نرجّع إحداثيات المربعات)
+  return c;   // كانفس N×N جاهز للنموذج
+}
+
+// =====================================================================
+// 5) التوقع + Grad-CAM
+//    TTA: بنتوقع على الصورة ونسختها المقلوبة وناخد المتوسط
+//    Grad-CAM: مع طبقة GlobalAveragePooling بيساوي مجموع (المميزات × أوزان الطبقة الأخيرة)
+// =====================================================================
+function predict(canvas) {
+  return tf.tidy(() => {
+    const x = tf.browser.fromPixels(canvas).toFloat().expandDims(0);     // [1,384,384,3] أرقام 0..255
+    const both = tf.concat([x, tf.reverse(x, 2)], 0);                    // الأصلية + المقلوبة
+    const [feat, prob] = model.execute(both, [FEAT, "Identity"]);
+    const p = prob.mean().dataSync()[0];                                 // متوسط الاحتمالين
+    let cam = tf.relu(feat.slice([0,0,0,0],[1,-1,-1,-1]).squeeze().mul(denseW).sum(-1)); // 12×12
+    cam = cam.div(cam.max().add(1e-8));
+    return { p, cam: Array.from(cam.dataSync(), v => +v.toFixed(3)) };
+  });
+}
+// تصنيف اللون حسب الحدود اللي اتحددت من الـ Validation
+const levelOf = p => p >= CFG.levels.red ? "red" : p >= CFG.levels.yellow ? "yellow" : "green";
+
+// =====================================================================
+// 5ب) YOLO: تحديد مكان الكسر بمربع
+//     المدخل: صورة 640×640 (رمادي، حواف 114، أرقام 0..1) ← المخرج: 8400 مربع مقترح [x,y,w,h,ثقة]
+//     بنشيل الضعيف (أقل من 25%) ونشيل المتكرر (NMS)
+// =====================================================================
+let yolo = null; const pendingYolo = new Map();     // صور مستنية YOLO يخلص تحميل
+async function loadYolo() {
+  setPill("", L().yLoading, "#yoloPill", "#yoloText");
+  try {
+    // ملف YOLO متقسم 4 أجزاء (علشان GitHub مابيقبلش ملف أكبر من 25MB من المتصفح) ← بنجمعهم تاني
+    const parts = await Promise.all([1, 2, 3, 4].map(i => `yolo/best.onnx.part${i}`).map(async u => new Uint8Array(await (await fetch(u)).arrayBuffer())));
+    const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let off = 0;
+    for (const p of parts) { bytes.set(p, off); off += p.length; }
+    yolo = await ort.InferenceSession.create(bytes, { executionProviders: ["wasm"] });
+    setPill("ok", L().yReady, "#yoloPill", "#yoloText");
+    for (const [id, cv] of pendingYolo) { const c = byId(id); if (c) await runYolo(c, cv); }   // الحالات اللي وصلت قبل ما يجهز
+    pendingYolo.clear();
+  } catch (e) { console.error(e); setPill("err", L().yFailed, "#yoloPill", "#yoloText"); }
+}
+async function detect(canvas) {
+  const N = 640, px = canvas.getContext("2d").getImageData(0, 0, N, N).data, x = new Float32Array(3 * N * N);
+  for (let i = 0; i < N * N; i++) x[i] = x[i + N*N] = x[i + 2*N*N] = px[i * 4] / 255;   // نفس القيمة في القنوات التلاتة (رمادي)
+  const out = (await yolo.run({ images: new ort.Tensor("float32", x, [1, 3, N, N]) })).output0.data;
+  const K = 8400, cand = [];
+  for (let i = 0; i < K; i++) {
+    const sc = out[4 * K + i]; if (sc < 0.25) continue;                 // ثقة أقل من 25% ← نتجاهله
+    const cx = out[i], cy = out[K + i], w = out[2 * K + i], h = out[3 * K + i];
+    cand.push([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, sc]);
+  }
+  cand.sort((a, b) => b[4] - a[4]);
+  const iou = (a, b) => { const iw = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])), ih = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    const I = iw * ih; return I / ((a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - I); };
+  const keep = []; for (const b of cand) if (keep.every(k => iou(k, b) < 0.45)) keep.push(b);   // NMS
+  // نحوّل الإحداثيات لنسبة من الصورة الأصلية (0..1) علشان نرسمها على أي حجم
+  const { x0, y0, w, h } = canvas.geo, cl = v => Math.max(0, Math.min(1, v));
+  return keep.slice(0, 5).map(b => [cl((b[0]-x0)/w), cl((b[1]-y0)/h), cl((b[2]-x0)/w), cl((b[3]-y0)/h), +b[4].toFixed(3)].map(v => +v.toFixed(4)));
+}
+async function runYolo(c, cv) {
+  try { c.boxes = await detect(cv); } catch (e) { console.error(e); c.boxes = []; }
+  save(); render();
+}
+
+// =====================================================================
+// 6) استقبال الصور (سحب وإفلات أو اختيار)
+// =====================================================================
+const drop = $("#drop"), fileInput = $("#file");
+drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => handleFiles([...e.dataTransfer.files]));
+fileInput.addEventListener("change", () => { handleFiles([...fileInput.files]); fileInput.value = ""; });   // نسخة من الليستة قبل ما نفضّي الخانة
+
+async function handleFiles(files) {
+  if (!model) { toast(L().loading); return; }
+  for (const f of files) {
+    if (!f.type.startsWith("image/")) { toast(L().notImage); continue; }
+    const img = await readImage(f), canvas = prepare(img), cv640 = prepare(img, 640, 114);
+    const { p, cam } = predict(canvas);
+    const c = {
+      id: S.next++, file: f.name, p: +p.toFixed(4), level: levelOf(p),
+      result: p >= CFG.threshold ? "fracture" : "normal",
+      arrivedAt: isoLocal(), reviewedAt: null, sentAt: null, summary: null, summaryDemo: false, sendState: "pending",
+      age: $("#fAge").value || "", sex: $("#fSex").value, region: $("#fRegion").value, cause: $("#fCause").value.trim(),
+      img: canvas.toDataURL("image/jpeg", 0.82), cam, ar: +(img.width / img.height).toFixed(4), boxes: null,
+      notes: "", decision: null, decidedAt: null
+    };
+    URL.revokeObjectURL(img.src);
+    S.cases.push(c); save(); render();
+    if (yolo) await runYolo(c, cv640); else pendingYolo.set(c.id, cv640);   // YOLO: مكان الكسر
+    sendCase(c);                                   // نبعت النتيجة لـ n8n
+  }
+}
+
+// =====================================================================
+// 7) الإرسال للـ Webhook (n8n) واستقبال الملخص
+// =====================================================================
+async function post(body) {
+  const r = await fetch(S.hook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(r.status);
+  const txt = await r.text();
+  try { const j = JSON.parse(txt); const o = Array.isArray(j) ? j[0] : j; return o?.summary ?? o?.output ?? o?.text ?? ""; }
+  catch { return txt; }                            // لو الرد نص عادي
+}
+// شكل البيانات المتفق عليه: case_id, result, confidence, level, uploaded_at (+ البيانات الأساسية)
+const payload = c => ({ event: "new_case", case_id: c.id, result: c.result, confidence: c.p, level: c.level,
+  uploaded_at: c.arrivedAt, age: c.age ? +c.age : null, sex: c.sex || null, region: c.region || null,
+  injury_cause: c.cause || null, file_name: c.file, model: CFG.model, lang: S.lang,
+  yolo_boxes: c.boxes ? c.boxes.length : null, yolo_max_conf: c.boxes && c.boxes.length ? c.boxes[0][4] : null });
+
+async function sendCase(c) {
+  if (!S.hook) {                                   // وضع تجريبي: ملخص محلي لين يتجهز رابط n8n
+    c.sendState = "demo"; c.summary = L().demo(c, L()); c.summaryDemo = true; save(); render(); return;
+  }
+  c.sendState = "sending"; render();
+  try { c.summary = (await post(payload(c))) || null; c.summaryDemo = false; c.sentAt = isoLocal(); c.sendState = "ok"; }
+  catch (e) { console.warn(e); c.sendState = "fail"; }
+  save(); render();
+}
+// أحداث تانية بتنرسل: المراجعة وقرار الطبيب (علشان تنحفظ في الشيت)
+async function sendEvent(body) { if (!S.hook) return; try { await post(body); } catch (e) { toast(L().hookBad); } }
+
+// =====================================================================
+// 8) رسم القائمة (مرتبة حسب الأولوية)
+// =====================================================================
+const RANK = { red: 0, yellow: 1, green: 2 };
+function sorted() {
+  // اللي لسه ما اتراجعش فوق ← حسب اللون ← الأعلى اشتباهًا ← الأقدم وصولًا
+  return [...S.cases].sort((a, b) => (!!a.reviewedAt - !!b.reviewedAt) || (RANK[a.level] - RANK[b.level]) || (b.p - a.p) || (a.id - b.id));
+}
+function render() {
+  const l = L(), open = S.cases.filter(c => !c.reviewedAt);
+  const cnt = k => open.filter(c => c.level === k).length;
+  $("#stats").innerHTML = [["red", cnt("red"), l.red], ["amb", cnt("yellow"), l.yellow], ["grn", cnt("green"), l.green],
+    ["", S.cases.length - open.length, l.reviewedN]].map(([k, n, t]) => `<div class="stat ${k}"><b class="num">${nf(n)}</b><span>${t}</span></div>`).join("");
+  $("#queueTitle").textContent = l.queue(nf(open.length));
+  $("#list").innerHTML = S.cases.length ? sorted().map(card).join("") : `<div class="empty">${l.empty}</div>`;
+  if (location.hash.startsWith("#case-")) showCase();
+}
+function card(c) {
+  const l = L(), done = !!c.reviewedAt, wait = minsBetween(c.arrivedAt, new Date());
+  const late = !done && c.level === "red" && wait >= 10;
+  const sum = c.summary ? `<div class="sum">📝 ${esc(c.summary)}${c.summaryDemo ? ` <small class="meta">(${l.demoTag})</small>` : ""}</div>`
+    : c.sendState === "fail" ? `<div class="sum wait">${l.summaryFail} · <button class="btn small ghost" data-resend="${c.id}">${l.resend}</button></div>`
+    : `<div class="sum wait">${l.summaryWait}</div>`;
+  return `<article class="case ${done ? "done" : c.level}">
+    <img class="thumb" src="${c.img}" alt="">
+    <div>
+      <h3>${done ? "✅" : ""} ${l.caseN(nf(c.id))} <span class="tag">${l[c.level]}</span></h3>
+      <div class="meta">${done ? l.reviewedAt(hhmm(c.reviewedAt), l.minutes(minsBetween(c.arrivedAt, c.reviewedAt)))
+        : `${l.suspicion}: <span class="num">${pct(c.p)}</span> · ${l.arrived} <span class="num">${hhmm(c.arrivedAt)}</span>`}
+        ${late ? ` · <span class="late">${l.late}</span>` : ""}</div>
+      <div class="yolo meta">${c.boxes == null ? l.yWait : c.boxes.length ? l.yFound(c.boxes.length) : l.yNone}</div>
+      ${sum}
+    </div>
+    <div class="actions">
+      <a class="btn small" href="#case-${c.id}">${l.open}</a>
+      ${done ? "" : `<button class="btn small primary" data-review="${c.id}">${l.review}</button>`}
+    </div></article>`;
+}
+
+// زرار "تمت المراجعة" وإعادة الإرسال (event delegation)
+document.addEventListener("click", e => {
+  const r = e.target.closest("[data-review]"), s = e.target.closest("[data-resend]");
+  if (r) markReviewed(+r.dataset.review);
+  if (s) sendCase(byId(+s.dataset.resend));
+});
+const byId = id => S.cases.find(c => c.id === id);
+function markReviewed(id) {
+  const c = byId(id); if (!c || c.reviewedAt) return;
+  c.reviewedAt = isoLocal(); save(); render();
+  sendEvent({ event: "reviewed", case_id: c.id, reviewed_at: c.reviewedAt, wait_minutes: minsBetween(c.arrivedAt, c.reviewedAt) });
+}
+
+// =====================================================================
+// 9) صفحة ملخص الحالة (#case-7)
+// =====================================================================
+function showCase() {
+  const id = +location.hash.slice(6), c = byId(id), v = $("#caseView");
+  if (!c) { location.hash = ""; return; }
+  const l = L();
+  $("#listView").hidden = true; v.hidden = false;
+  v.innerHTML = `
+    <a class="btn small ghost back" href="#">${S.lang === "ar" ? "→" : "←"} ${l.back}</a>
+    <div class="listhead"><h2 style="font-size:24px">${l.caseSummary(nf(c.id))}</h2>
+      <span class="tag" style="--c:var(--${c.level==="red"?"red":c.level==="yellow"?"amb":"grn"});--cb:var(--${c.level==="red"?"red":c.level==="yellow"?"amb":"grn"}-bg);padding:6px 14px">${l.priority[c.level]}</span></div>
+    <div class="casegrid">
+      <div class="viewer">
+        <div class="stage"><img src="${c.img}" alt="X-ray"><canvas id="cam" width="384" height="384"></canvas>${boxSvg(c)}</div>
+        <div class="vbar"><label class="toggle" style="color:inherit;margin:0"><input type="checkbox" id="boxOn" checked> <b>${l.yBox}</b></label>
+          <span>${c.boxes == null ? l.yWait : c.boxes.length ? l.yFound(c.boxes.length) : l.yNone}</span></div>
+        <div class="vbar"><b>${l.heat}</b>
+          <input type="range" id="camOp" min="0" max="100" value="60" aria-label="${l.heat}"></div>
+        <div class="legend"><span>${l.low}</span><i></i><span>${l.high}</span></div>
+        <p class="note" style="color:#9aa4b2">${l.heatHelp}</p>
+        <p class="note" style="color:#9aa4b2">${l.yHelp}</p>
+      </div>
+      <div class="stack">
+        <div class="card ${c.level}"><h2>${l.modelResult}</h2>
+          <div class="prob num" style="color:var(--${c.level==="red"?"red":c.level==="yellow"?"amb":"grn"})">${pct(c.p)}</div>
+          <div class="bar" style="--c:var(--${c.level==="red"?"red":c.level==="yellow"?"amb":"grn"})"><i style="width:${(c.p*100).toFixed(1)}%"></i></div>
+          <div class="meta">${l.fracture} · ${l[c.level]}</div></div>
+        <div class="card"><h2>${l.basics}</h2>
+          <div class="fields">
+            <div><label for="cAge">${l.age}</label><input id="cAge" type="number" min="0" max="120" value="${esc(c.age)}"></div>
+            <div><label for="cSex">${l.sex}</label><select id="cSex">${opts(l.sexes, c.sex)}</select></div>
+            <div class="wide"><label for="cRegion">${l.region}</label><select id="cRegion">${opts(l.regions, c.region)}</select></div>
+            <div class="wide"><label for="cCause">${l.cause}</label><input id="cCause" value="${esc(c.cause)}"></div>
+          </div></div>
+        <div class="card"><h2>${l.times}</h2><dl class="kv">
+          <dt>${l.tArrive}</dt><dd class="num">${hhmm(c.arrivedAt)}</dd>
+          <dt>${l.tAlert}</dt><dd class="num">${c.sentAt ? hhmm(c.sentAt) : c.sendState === "demo" ? "—" : l.notSent}</dd>
+          <dt>${l.tReview}</dt><dd class="num">${c.reviewedAt ? `${hhmm(c.reviewedAt)} · ${l.minutes(minsBetween(c.arrivedAt, c.reviewedAt))}` : l.notYet}</dd></dl></div>
+        <div class="card"><h2>📝 ${l.initSummary}</h2><p style="margin:0">${c.summary ? esc(c.summary) : l.summaryWait}</p>
+          ${c.summaryDemo ? `<p class="note">${l.demoTag}</p>` : ""}</div>
+        <div class="card"><h2>${l.notes}</h2><textarea id="cNotes">${esc(c.notes)}</textarea>
+          <h2 style="margin-top:14px">${l.decision}</h2>
+          <div class="decisions">${Object.entries(l.dec).map(([k, t]) => `<button class="btn ${c.decision === k ? "on" : ""}" data-dec="${k}">${k === "confirm" ? "✅ " : ""}${t}</button>`).join("")}</div>
+          <div id="eye" class="warn" style="margin-top:12px" ${c.decision === "none" && c.level === "red" ? "" : "hidden"}>⚠️ ${l.secondEye}</div>
+          ${c.reviewedAt ? "" : `<button class="btn primary" style="margin-top:12px;width:100%" data-review="${c.id}">${l.review}</button>`}
+        </div>
+      </div>
+    </div>`;
+  drawCam(c.cam, $("#cam"));
+  const op = $("#camOp"); op.oninput = () => $("#cam").style.opacity = op.value / 100; op.oninput();
+  $("#boxOn").onchange = e => { const b = $("#boxes"); if (b) b.style.display = e.target.checked ? "" : "none"; };
+  // حفظ البيانات الأساسية والملاحظات أول ما تتغير
+  [["cAge","age"],["cSex","sex"],["cRegion","region"],["cCause","cause"],["cNotes","notes"]].forEach(([el, k]) =>
+    $("#" + el).addEventListener("change", e => { c[k] = e.target.value; save(); }));
+  v.querySelectorAll("[data-dec]").forEach(b => b.onclick = () => decide(c, b.dataset.dec));
+}
+// مربعات YOLO فوق الأشعة (الإحداثيات نسبة من الصورة الأصلية ← نحطها جوه مربع 384)
+function boxSvg(c) {
+  if (!c.boxes || !c.boxes.length) return "";
+  const iw = c.ar >= 1 ? 384 : 384 * c.ar, ih = c.ar >= 1 ? 384 / c.ar : 384, ox = (384 - iw) / 2, oy = (384 - ih) / 2;
+  return `<svg id="boxes" viewBox="0 0 384 384" preserveAspectRatio="none">${c.boxes.map(([a, b, x2, y2, s]) => {
+    const X = ox + a * iw, Y = oy + b * ih, W = (x2 - a) * iw, H = (y2 - b) * ih;
+    return `<rect x="${X.toFixed(1)}" y="${Y.toFixed(1)}" width="${W.toFixed(1)}" height="${H.toFixed(1)}" rx="3"/><text x="${X.toFixed(1)}" y="${Math.max(14, Y - 5).toFixed(1)}" direction="ltr">${Math.round(s * 100)}%</text>`;
+  }).join("")}</svg>`;
+}
+const opts = (o, sel) => Object.entries(o).map(([k, t]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${t}</option>`).join("");
+
+// "العين الثانية": لو الطبيب قال "لا يوجد كسر" والنموذج شايف اشتباه قوي ← نسأله يتأكد
+async function decide(c, k) {
+  if (k === "none" && c.level === "red" && !(await ask(L().secondEyeAsk, L().sure, L().keep))) return;
+  c.decision = k; c.decidedAt = isoLocal(); c.notes = $("#cNotes").value;
+  if (!c.reviewedAt) c.reviewedAt = c.decidedAt;           // القرار = مراجعة
+  save(); showCase(); toast(L().decSaved);
+  sendEvent({ event: "doctor_decision", case_id: c.id, decision: k, notes: c.notes || null, decided_at: c.decidedAt,
+    model_level: c.level, model_result: c.result, agrees_with_model: (k === "confirm") === (c.result === "fracture") });
+}
+
+// رسم الخريطة الحرارية: 12×12 خانة بألوان jet، والمتصفح بيكبرها بنعومة لـ 384
+function drawCam(cam, canvas) {
+  const s = document.createElement("canvas"); s.width = s.height = 12;
+  const g = s.getContext("2d"), d = g.createImageData(12, 12);
+  const jet = v => [Math.min(1, Math.max(0, 1.5 - Math.abs(4*v - 3))), Math.min(1, Math.max(0, 1.5 - Math.abs(4*v - 2))), Math.min(1, Math.max(0, 1.5 - Math.abs(4*v - 1)))];
+  cam.forEach((v, i) => { const [r, gg, b] = jet(v); d.data.set([r*255, gg*255, b*255, 255*Math.min(1, 0.25 + v)], i*4); });
+  g.putImageData(d, 0, 0);
+  const G = canvas.getContext("2d"); G.clearRect(0, 0, 384, 384);
+  G.imageSmoothingEnabled = true; G.imageSmoothingQuality = "high"; G.drawImage(s, 0, 0, 384, 384);
+}
+
+// التنقل بين القائمة وصفحة الحالة
+addEventListener("hashchange", () => {
+  if (location.hash.startsWith("#case-")) { showCase(); scrollTo(0, 0); }
+  else { $("#caseView").hidden = true; $("#listView").hidden = false; render(); }
+});
+
+// =====================================================================
+// 10) الإعدادات، التصدير، المسح، واللغة
+// =====================================================================
+$("#settingsBtn").onclick = () => { $("#hook").value = S.hook; $("#settings").hidden = false; $("#hook").focus(); };
+$("#setCancel").onclick = () => $("#settings").hidden = true;
+$("#setSave").onclick = () => { S.hook = $("#hook").value.trim(); save(); $("#settings").hidden = true; render(); };
+$("#hookTest").onclick = async () => {
+  const keep = S.hook; S.hook = $("#hook").value.trim(); if (!S.hook) { S.hook = keep; return; }
+  try { const s = await post({ event: "test", case_id: 0, result: "normal", confidence: 0.12, level: "green", uploaded_at: isoLocal() });
+    toast(L().hookOk + (s ? ` — ${s.slice(0, 80)}` : "")); }
+  catch (e) { toast(L().hookBad); } finally { S.hook = keep; }
+};
+$("#csvBtn").onclick = () => {
+  const cols = ["id","file","p","level","result","arrivedAt","sentAt","reviewedAt","decision","decidedAt","age","sex","region","cause","notes","summary","boxes"];
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = "﻿" + [cols.join(","), ...S.cases.map(c => cols.map(k => q(k === "boxes" ? (c.boxes ? c.boxes.length : "") : c[k])).join(","))].join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = `fracture-triage-${isoLocal().slice(0, 10)}.csv`; a.click();
+};
+$("#clearBtn").onclick = async () => { if (await ask(L().clearAsk, L().yes, L().no)) { S.cases = []; S.next = 1; save(); render(); } };
+$("#langBtn").onclick = () => { S.lang = S.lang === "ar" ? "en" : "ar"; save(); applyLang(); };
+
+// نافذة سؤال (بترجع true أو false)
+function ask(text, yes, no) {
+  return new Promise(res => {
+    $("#askText").textContent = text; $("#askYes").textContent = yes; $("#askNo").textContent = no; $("#ask").hidden = false;
+    $("#askYes").onclick = () => { $("#ask").hidden = true; res(true); };
+    $("#askNo").onclick = () => { $("#ask").hidden = true; res(false); };
+  });
+}
+let tt; function toast(m) { const t = $("#toast"); t.textContent = m; t.hidden = false; clearTimeout(tt); tt = setTimeout(() => t.hidden = true, 3200); }
+addEventListener("keydown", e => { if (e.key === "Escape") { $("#settings").hidden = true; if (!$("#ask").hidden) $("#askNo").click(); } });
+
+// تطبيق اللغة: الاتجاه (يمين/شمال) + كل النصوص
+function applyLang() {
+  const l = L(); document.documentElement.lang = S.lang; document.documentElement.dir = S.lang === "ar" ? "rtl" : "ltr";
+  document.title = l.title; $("#langBtn").textContent = S.lang === "ar" ? "English" : "العربية";
+  document.querySelectorAll("[data-t]").forEach(el => { el.textContent = l[el.dataset.t]; });
+  [["#fSex", l.sexes], ["#fRegion", l.regions]].forEach(([s, o]) => { const v = $(s).value; $(s).innerHTML = opts(o, v); });
+  setPill($("#modelPill").classList.contains("ok") ? "ok" : $("#modelPill").classList.contains("err") ? "err" : "", model ? l.ready : $("#modelPill").classList.contains("err") ? l.failed : l.loading);
+  const yp = $("#yoloPill").classList; setPill(yp.contains("ok") ? "ok" : yp.contains("err") ? "err" : "", yolo ? l.yReady : yp.contains("err") ? l.yFailed : l.yLoading, "#yoloPill", "#yoloText");
+  render();
+}
+
+// تحديث "انتظرت كذا دقيقة" و"تجاوزت 10 دقايق" كل نص دقيقة
+setInterval(() => { if (!location.hash.startsWith("#case-")) render(); }, 30000);
+
+applyLang();
+loadModel().then(loadYolo);   // الأول نموذج التصنيف، وبعده YOLO (أكبر في الحجم)
+}
+</script>
+</body>
+</html>
