@@ -1,0 +1,27 @@
+{
+  "model": "DenseNet121",
+  "dataset": "GRAZPEDWRI-DX",
+  "input_size": [
+    384,
+    384
+  ],
+  "input_format": "RGB 0-255, grayscale X-ray letterboxed to square",
+  "classes": [
+    "normal",
+    "fracture"
+  ],
+  "threshold": 0.2748,
+  "levels": {
+    "red": 0.4329,
+    "yellow": 0.0515
+  },
+  "test_metrics": {
+    "AUC": 0.9686,
+    "Accuracy": 0.9203,
+    "Recall": 0.9275,
+    "Precision": 0.95,
+    "Specificity": 0.9064,
+    "F1": 0.9386
+  },
+  "disclaimer": "نموذج تعليمي، مش للاستخدام الطبي"
+}
