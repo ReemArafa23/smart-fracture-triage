@@ -23,5 +23,6 @@
     "Specificity": 0.9064,
     "F1": 0.9386
   },
-  "disclaimer": "نموذج تعليمي، مش للاستخدام الطبي"
+  "disclaimer": "نموذج تعليمي، مش للاستخدام الطبي",
+  "assistant_url": "https://fracture-assistant.mabelal2006.workers.dev/"
 }

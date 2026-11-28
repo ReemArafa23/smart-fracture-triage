@@ -6,7 +6,7 @@
 // الإعدادات (Settings → Variables and Secrets):
 //   GEMINI_API_KEY   (Secret)  مفتاح Gemini من Google AI Studio
 //   ALLOWED_ORIGINS  (Text)    المواقع المسموح لها، مفصولة بفاصلة — مثال: https://reemarafa23.github.io
-//   GEMINI_MODEL     (Text, اختياري)  اسم الموديل — الافتراضي gemini-2.5-flash
+//   GEMINI_MODEL     (Text, اختياري)  اسم موديل معين — لو فاضي بيجرب gemini-flash-latest وبعدين موديلات تانية
 // =====================================================================
 
 const SYSTEM = `You are the assistant inside "Smart Fracture Triage" (فرز الكسور الذكي), an educational web page that sorts pediatric hand/wrist X-rays by fracture suspicion.
@@ -51,19 +51,26 @@ export default {
     if (!msgs.length || msgs[msgs.length - 1].role !== "user") return reply({ error: "no question" }, 400);
     const context = JSON.stringify({ lang: body.lang === "en" ? "en" : "ar", ...(body.context || {}) }).slice(0, 6000);
 
-    const model = env.GEMINI_MODEL || "gemini-2.5-flash";
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM + "\n\nPage context (JSON):\n" + context }] },
-        contents: msgs,
-        generationConfig: { temperature: 0.4, maxOutputTokens: 1024,
-          // موديلات 2.5 Flash بتفكر قبل ما ترد؛ بنقفل التفكير علشان الرد يبقى أسرع وما يتقصش
-          ...(/2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) }
-      })
-    });
-    if (!r.ok) return reply({ error: "gemini error", status: r.status }, 502);
+    // الموديلات اللي هنجربها بالترتيب: لو جوجل وقّف موديل (404) نجرب اللي بعده
+    // ونقدر نحدد موديل معين من المتغير GEMINI_MODEL في إعدادات كلاود فلير
+    const models = [env.GEMINI_MODEL, "gemini-flash-latest", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash"].filter(Boolean);
+    let r, used;
+    for (const model of models) {
+      used = model;
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM + "\n\nPage context (JSON):\n" + context }] },
+          contents: msgs,
+          generationConfig: { temperature: 0.4, maxOutputTokens: 2048,
+            // موديلات 2.5 Flash بتفكر قبل ما ترد؛ بنقفل التفكير علشان الرد يبقى أسرع
+            ...(/2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) }
+        })
+      });
+      if (r.status !== 404) break;                 // 404 = الموديل مش موجود ← نجرب اللي بعده
+    }
+    if (!r.ok) return reply({ error: "gemini error", status: r.status, model: used, detail: (await r.text()).slice(0, 300) }, 502);
     const j = await r.json();
     const text = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("").trim();
     return reply({ reply: text || (body.lang === "en" ? "Sorry, I couldn't answer that." : "عذرًا، ما قدرت أجاوب على هذا السؤال.") });
